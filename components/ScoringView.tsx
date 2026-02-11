@@ -1,7 +1,6 @@
 
 import React, { useState } from 'react';
-// Added Layers to the lucide-react imports to fix the "Cannot find name 'Layers'" error
-import { Check, X, Search, User, AlertCircle, CheckCircle2, Loader2, Info, Layers } from 'lucide-react';
+import { Check, X, Search, User, AlertCircle, CheckCircle2, Loader2, Info, Layers, MessageSquare } from 'lucide-react';
 import { Student, Word, AssessmentRecord, SpellingRule, TestRound } from '../types';
 import { supabase } from '../lib/supabase';
 
@@ -22,7 +21,7 @@ const ScoringView: React.FC<ScoringViewProps> = ({
     students.length > 0 ? students[0].id : null
   );
   const [searchTerm, setSearchTerm] = useState('');
-  const [syncing, setSyncing] = useState<string | null>(null); // Word ID that is syncing
+  const [syncing, setSyncing] = useState<string | null>(null);
 
   const syncAssessment = async (record: AssessmentRecord) => {
     if (!activeTestRound) return;
@@ -34,6 +33,7 @@ const ScoringView: React.FC<ScoringViewProps> = ({
         test_round_id: activeTestRound.id,
         user_id: userId,
         rule_results: record.ruleResults,
+        notes: record.notes || '',
         is_attempted: record.isAttempted
       }, { onConflict: 'student_id, word_id, test_round_id' });
       
@@ -59,6 +59,7 @@ const ScoringView: React.FC<ScoringViewProps> = ({
           wordId, 
           testRoundId: activeTestRound.id, 
           ruleResults: {}, 
+          notes: '',
           isAttempted: true,
           user_id: userId
         };
@@ -86,9 +87,33 @@ const ScoringView: React.FC<ScoringViewProps> = ({
     syncAssessment(newRecord);
   };
 
+  const handleNoteChange = (wordId: string, note: string) => {
+    if (!selectedStudentId || !activeTestRound) return;
+
+    setAssessments(prev => {
+      const idx = prev.findIndex(a => a.studentId === selectedStudentId && a.wordId === wordId);
+      if (idx > -1) {
+        const updated = [...prev];
+        updated[idx] = { ...updated[idx], notes: note };
+        return updated;
+      } else {
+        return [...prev, {
+          studentId: selectedStudentId,
+          wordId,
+          testRoundId: activeTestRound.id,
+          ruleResults: {},
+          notes: note,
+          isAttempted: true,
+          user_id: userId
+        }];
+      }
+    });
+  };
+
   const handleQuickPass = (word: Word) => {
     if (!selectedStudentId || !activeTestRound) return;
     
+    const existingRecord = assessments.find(a => a.studentId === selectedStudentId && a.wordId === word.id);
     const allCorrect: Record<string, boolean> = {};
     word.ruleIds.forEach((rid: string) => {
       allCorrect[rid] = true;
@@ -99,15 +124,16 @@ const ScoringView: React.FC<ScoringViewProps> = ({
       wordId: word.id, 
       testRoundId: activeTestRound.id,
       ruleResults: allCorrect, 
+      notes: existingRecord?.notes || '',
       isAttempted: true,
       user_id: userId
     };
 
     setAssessments(prev => {
-      const existingIdx = prev.findIndex(a => a.studentId === selectedStudentId && a.wordId === word.id);
-      if (existingIdx > -1) {
+      const idx = prev.findIndex(a => a.studentId === selectedStudentId && a.wordId === word.id);
+      if (idx > -1) {
         const updated = [...prev];
-        updated[existingIdx] = newRecord;
+        updated[idx] = newRecord;
         return updated;
       }
       return [...prev, newRecord];
@@ -124,21 +150,7 @@ const ScoringView: React.FC<ScoringViewProps> = ({
       <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-slate-300">
         <AlertCircle size={48} className="mx-auto text-amber-500 mb-4" />
         <h3 className="text-xl font-bold text-slate-700">Geen actieve testronde</h3>
-        <p className="text-slate-500 max-w-sm mx-auto">
-          Ga naar de 'Beheer' pagina om een nieuwe testronde aan te maken (bijv. "Januari 2024").
-        </p>
-      </div>
-    );
-  }
-
-  if (students.length === 0) {
-    return (
-      <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-slate-300">
-        <User size={48} className="mx-auto text-indigo-500 mb-4" />
-        <h3 className="text-xl font-bold text-slate-700">Geen leerlingen gevonden</h3>
-        <p className="text-slate-500 max-w-sm mx-auto">
-          Voeg eerst leerlingen toe in de bibliotheek op de 'Beheer' pagina.
-        </p>
+        <p className="text-slate-500 max-w-sm mx-auto">Selecteer een ronde in de zijbalk of maak een nieuwe aan bij Beheer.</p>
       </div>
     );
   }
@@ -152,7 +164,7 @@ const ScoringView: React.FC<ScoringViewProps> = ({
             <span className="text-sm font-bold text-indigo-600 uppercase tracking-widest">Testronde: {activeTestRound.name}</span>
           </div>
           <h2 className="text-3xl font-extrabold text-slate-900">Scoren & Afvinken</h2>
-          <p className="text-slate-500 mt-2">Duid aan welke specifieke spellingsregel per woord correct of foutief is.</p>
+          <p className="text-slate-500 mt-2">Duid regels aan en voeg eventueel opmerkingen toe per woord.</p>
         </div>
         
         <div className="flex flex-wrap gap-4">
@@ -182,9 +194,7 @@ const ScoringView: React.FC<ScoringViewProps> = ({
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="p-4 bg-indigo-600 text-white flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center font-bold text-lg">
-              {selectedStudent?.name.charAt(0)}
-            </div>
+            <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center font-bold text-lg">{selectedStudent?.name.charAt(0)}</div>
             <div>
               <p className="text-[10px] font-bold text-indigo-100 uppercase tracking-widest">Huidige leerling</p>
               <h3 className="font-bold text-lg leading-tight">{selectedStudent?.name}</h3>
@@ -203,7 +213,7 @@ const ScoringView: React.FC<ScoringViewProps> = ({
             <thead>
               <tr className="bg-slate-50 border-b border-slate-100">
                 <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest">Woord</th>
-                <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest">Status per regel</th>
+                <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest">Regels & Opmerkingen</th>
                 <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest text-center">Actie</th>
               </tr>
             </thead>
@@ -214,54 +224,58 @@ const ScoringView: React.FC<ScoringViewProps> = ({
                 
                 return (
                   <tr key={w.id} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="px-6 py-6 w-1/4">
+                    <td className="px-6 py-6 w-1/5 align-top">
                       <div className="flex items-center gap-2">
                         <span className="font-bold text-slate-800 text-lg">{w.text}</span>
                         {isSyncing && <Loader2 size={14} className="animate-spin text-indigo-400" />}
                       </div>
                     </td>
                     <td className="px-6 py-6">
-                      <div className="flex flex-wrap gap-6">
-                        {w.ruleIds.map(rid => {
-                          const rule = rules.find(r => r.id === rid);
-                          const res = record?.ruleResults?.[rid];
-                          return (
-                            <div key={rid} className="flex flex-col gap-1 min-w-[80px]">
-                              <div className="flex items-center gap-1 mb-1">
-                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{rule?.code || '??'}</span>
-                                {rule?.description && (
-                                  <div className="group relative">
-                                    <Info size={10} className="text-slate-300 cursor-help" />
-                                    <div className="absolute bottom-full left-0 mb-2 w-48 p-2 bg-slate-800 text-white text-[10px] rounded shadow-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-20">
-                                      {rule.description}
+                      <div className="space-y-4">
+                        <div className="flex flex-wrap gap-4">
+                          {w.ruleIds.map(rid => {
+                            const rule = rules.find(r => r.id === rid);
+                            const res = record?.ruleResults?.[rid];
+                            return (
+                              <div key={rid} className="flex flex-col gap-1 min-w-[70px]">
+                                <div className="flex items-center gap-1 mb-1">
+                                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{rule?.code || '??'}</span>
+                                  {rule?.description && (
+                                    <div className="group relative">
+                                      <Info size={10} className="text-slate-300 cursor-help" />
+                                      <div className="absolute bottom-full left-0 mb-2 w-48 p-2 bg-slate-800 text-white text-[10px] rounded shadow-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-20">
+                                        {rule.description}
+                                      </div>
                                     </div>
-                                  </div>
-                                )}
+                                  )}
+                                </div>
+                                <div className="flex border border-slate-200 rounded-lg bg-white shadow-sm overflow-hidden w-fit">
+                                  <button onClick={() => handleRuleToggle(w.id, rid, true)} className={`p-1.5 transition-colors ${res === true ? 'bg-emerald-500 text-white' : 'text-slate-300 hover:bg-emerald-50 hover:text-emerald-500'}`}><Check size={16} strokeWidth={3} /></button>
+                                  <div className="w-px bg-slate-100" />
+                                  <button onClick={() => handleRuleToggle(w.id, rid, false)} className={`p-1.5 transition-colors ${res === false ? 'bg-rose-500 text-white' : 'text-slate-300 hover:bg-rose-50 hover:text-rose-500'}`}><X size={16} strokeWidth={3} /></button>
+                                </div>
                               </div>
-                              <div className="flex border border-slate-200 rounded-lg bg-white shadow-sm overflow-hidden w-fit">
-                                <button 
-                                  onClick={() => handleRuleToggle(w.id, rid, true)} 
-                                  className={`p-2 transition-colors ${res === true ? 'bg-emerald-500 text-white' : 'text-slate-300 hover:bg-emerald-50 hover:text-emerald-500'}`}
-                                >
-                                  <Check size={18} strokeWidth={3} />
-                                </button>
-                                <div className="w-px bg-slate-100" />
-                                <button 
-                                  onClick={() => handleRuleToggle(w.id, rid, false)} 
-                                  className={`p-2 transition-colors ${res === false ? 'bg-rose-500 text-white' : 'text-slate-300 hover:bg-rose-50 hover:text-rose-500'}`}
-                                >
-                                  <X size={18} strokeWidth={3} />
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                        {w.ruleIds.length === 0 && (
-                          <span className="text-xs text-slate-400 italic py-2">Geen regels gekoppeld</span>
-                        )}
+                            );
+                          })}
+                        </div>
+                        
+                        <div className="relative group">
+                          <MessageSquare size={14} className="absolute left-3 top-3 text-slate-300 group-focus-within:text-indigo-400 transition-colors" />
+                          <input 
+                            type="text"
+                            placeholder="Extra opmerking voor dit woord..."
+                            value={record?.notes || ''}
+                            onChange={(e) => handleNoteChange(w.id, e.target.value)}
+                            onBlur={() => {
+                              const updatedRecord = assessments.find(a => a.studentId === selectedStudentId && a.wordId === w.id);
+                              if (updatedRecord) syncAssessment(updatedRecord);
+                            }}
+                            className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-100 rounded-xl text-sm text-slate-600 focus:bg-white focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 outline-none transition-all italic"
+                          />
+                        </div>
                       </div>
                     </td>
-                    <td className="px-6 py-6 text-center">
+                    <td className="px-6 py-6 text-center align-top">
                       <button 
                         onClick={() => handleQuickPass(w)} 
                         title="Alles correct"
@@ -273,13 +287,6 @@ const ScoringView: React.FC<ScoringViewProps> = ({
                   </tr>
                 );
               })}
-              {filteredWords.length === 0 && (
-                <tr>
-                  <td colSpan={3} className="px-6 py-12 text-center text-slate-400 italic">
-                    Geen woorden gevonden voor deze zoekopdracht.
-                  </td>
-                </tr>
-              )}
             </tbody>
           </table>
         </div>
