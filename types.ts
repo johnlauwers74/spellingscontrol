@@ -33,6 +33,7 @@ export interface AssessmentRecord {
   wordId: string;
   testRoundId: string;
   ruleResults: Record<string, boolean>;
+  notes?: string;
   isAttempted: boolean;
   user_id?: string;
 }
