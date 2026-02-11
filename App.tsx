@@ -92,6 +92,7 @@ const App: React.FC = () => {
           wordId: a.word_id,
           testRoundId: a.test_round_id,
           ruleResults: a.rule_results,
+          notes: a.notes || '',
           isAttempted: a.is_attempted,
           user_id: a.user_id
         })));
