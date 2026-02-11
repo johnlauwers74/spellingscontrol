@@ -147,7 +147,8 @@ const ReportView: React.FC<ReportViewProps> = ({ students, words, rules, assessm
             'Woord': word.text,
             'Regel Code': rule.code,
             'Regel Omschrijving': rule.description,
-            'Resultaat': resultText
+            'Resultaat': resultText,
+            'Opmerkingen': ass?.notes || ''
           });
         });
       });
@@ -168,7 +169,8 @@ const ReportView: React.FC<ReportViewProps> = ({ students, words, rules, assessm
       {wch: 15}, // Woord
       {wch: 12}, // Regel Code
       {wch: 45}, // Regel Omschrijving
-      {wch: 18}  // Resultaat
+      {wch: 18}, // Resultaat
+      {wch: 40}  // Opmerkingen
     ];
 
     XLSX.writeFile(workbook, `VCLB_Spelling_Gedetailleerd_${new Date().toISOString().split('T')[0]}.xlsx`);
