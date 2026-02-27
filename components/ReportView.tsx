@@ -269,7 +269,7 @@ const ReportView: React.FC<ReportViewProps> = ({ students, words, rules, assessm
     if (selectedStudentId === 'all') return;
     setLoadingAi(true);
     try {
-      const apiKey = process.env.API_KEY;
+      const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) {
         setAiFeedback("AI feedback is momenteel niet beschikbaar (API sleutel ontbreekt).");
         setLoadingAi(false);
@@ -558,6 +558,5 @@ const ReportView: React.FC<ReportViewProps> = ({ students, words, rules, assessm
     </div>
   );
 };
-
 
 export default ReportView;
