@@ -1,9 +1,11 @@
 
 import React, { useMemo, useState } from 'react';
 import { Student, Word, SpellingRule, AssessmentRecord } from '../types';
-import { TrendingDown, BookOpen, AlertCircle, Sparkles, Users, BarChart3, ListChecks, FileSpreadsheet, Loader2, Info } from 'lucide-react';
+import { TrendingDown, BookOpen, AlertCircle, Sparkles, Users, BarChart3, ListChecks, FileSpreadsheet, Loader2, Info, FileDown } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
 import * as XLSX from 'xlsx';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface ReportViewProps {
   students: Student[];
@@ -176,6 +178,93 @@ const ReportView: React.FC<ReportViewProps> = ({ students, words, rules, assessm
     XLSX.writeFile(workbook, `VCLB_Spelling_Gedetailleerd_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
+  const exportToPDF = () => {
+    const doc = new jsPDF();
+    const timestamp = new Date().toLocaleDateString('nl-BE');
+    
+    // Header
+    doc.setFontSize(20);
+    doc.setTextColor(79, 70, 229); // Indigo-600
+    doc.text('VCLB Spelling: Groepsoverzicht', 14, 22);
+    
+    doc.setFontSize(10);
+    doc.setTextColor(100, 116, 139); // Slate-500
+    doc.text(`Gegenereerd op: ${timestamp}`, 14, 30);
+    
+    // Summary Stats
+    doc.setFontSize(14);
+    doc.setTextColor(30, 41, 59); // Slate-800
+    doc.text('Groepsstatistieken', 14, 45);
+    
+    const avgScore = students.length > 0 
+      ? Math.round(individualData.reduce((acc, curr) => acc + (curr.totalCorrect / Math.max(1, words.length) * 100), 0) / students.length) 
+      : 0;
+
+    autoTable(doc, {
+      startY: 50,
+      head: [['Onderdeel', 'Waarde']],
+      body: [
+        ['Grootste struikelblok', groupRuleStats[0]?.rule.code || '-'],
+        ['Moeilijkste woord', groupWordStats[0]?.word.text || '-'],
+        ['Algemene score', `${avgScore}%`],
+        ['Aantal leerlingen', students.length.toString()],
+        ['Aantal woorden', words.length.toString()]
+      ],
+      theme: 'striped',
+      headStyles: { fillColor: [79, 70, 229] }
+    });
+
+    // Rule Analysis Table
+    doc.setFontSize(14);
+    doc.text('Regel-uitval (Groep)', 14, (doc as any).lastAutoTable.finalY + 15);
+    
+    const ruleRows = groupRuleStats.map(stat => [
+      stat.rule.code,
+      stat.rule.description,
+      `${Math.round(stat.errorRate)}%`,
+      stat.failingStudentNames.join(', ') || 'Geen'
+    ]);
+
+    autoTable(doc, {
+      startY: (doc as any).lastAutoTable.finalY + 20,
+      head: [['Code', 'Omschrijving', 'Uitval %', 'Leerlingen']],
+      body: ruleRows,
+      theme: 'grid',
+      headStyles: { fillColor: [79, 70, 229] },
+      columnStyles: {
+        0: { cellWidth: 20 },
+        1: { cellWidth: 60 },
+        2: { cellWidth: 20 },
+        3: { cellWidth: 'auto' }
+      }
+    });
+
+    // Word Analysis Table
+    doc.addPage();
+    doc.setFontSize(14);
+    doc.text('Analyse per Testwoord', 14, 22);
+
+    const wordRows = groupWordStats.map(stat => {
+      const ruleCodes = stat.word.ruleIds.map(rid => rules.find(r => r.id === rid)?.code).filter(Boolean).join(', ');
+      return [
+        stat.word.text,
+        ruleCodes,
+        `${stat.errors} / ${stat.totalAttempts}`,
+        `${100 - Math.round(stat.errorRate)}%`
+      ];
+    });
+
+    autoTable(doc, {
+      startY: 30,
+      head: [['Woord', 'Regels', 'Fouten', 'Score OK']],
+      body: wordRows,
+      theme: 'striped',
+      headStyles: { fillColor: [245, 158, 11] } // Amber-500
+    });
+
+    doc.save(`VCLB_Groepsoverzicht_${new Date().toISOString().split('T')[0]}.pdf`);
+  };
+
   const getSmartFeedback = async () => {
     if (selectedStudentId === 'all') return;
     setLoadingAi(true);
@@ -231,13 +320,22 @@ const ReportView: React.FC<ReportViewProps> = ({ students, words, rules, assessm
           <p className="text-slate-500 mt-2">Gedetailleerde inzichten in de spellingsvaardigheden.</p>
         </div>
         
-        <button 
-          onClick={exportToExcel}
-          className="flex items-center gap-2 px-6 py-3 bg-emerald-600 rounded-2xl font-bold text-white hover:bg-emerald-700 shadow-xl shadow-emerald-100 transition-all transform hover:-translate-y-0.5"
-        >
-          <FileSpreadsheet size={20} />
-          Exporteer naar Excel (Gedetailleerd)
-        </button>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <button 
+            onClick={exportToPDF}
+            className="flex items-center gap-2 px-6 py-3 bg-indigo-600 rounded-2xl font-bold text-white hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all transform hover:-translate-y-0.5"
+          >
+            <FileDown size={20} />
+            Groepsoverzicht PDF
+          </button>
+          <button 
+            onClick={exportToExcel}
+            className="flex items-center gap-2 px-6 py-3 bg-emerald-600 rounded-2xl font-bold text-white hover:bg-emerald-700 shadow-xl shadow-emerald-100 transition-all transform hover:-translate-y-0.5"
+          >
+            <FileSpreadsheet size={20} />
+            Excel Export
+          </button>
+        </div>
       </header>
 
       {/* Navigatie Tabs */}
