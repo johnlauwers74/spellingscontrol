@@ -559,4 +559,5 @@ const ReportView: React.FC<ReportViewProps> = ({ students, words, rules, assessm
   );
 };
 
+
 export default ReportView;
