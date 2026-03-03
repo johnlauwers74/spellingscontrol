@@ -1,7 +1,7 @@
 
-import React, { useState } from 'react';
-import { Plus, Trash2, UserPlus, BookOpen, AlertCircle, Bookmark, X, Layers, Info } from 'lucide-react';
-import { Student, SpellingRule, Word, TestRound } from '../types';
+import React, { useState, useEffect } from 'react';
+import { Plus, Trash2, UserPlus, BookOpen, AlertCircle, Bookmark, X, Layers, Info, Save, Download } from 'lucide-react';
+import { Student, SpellingRule, Word, TestRound, WordList, WordListItem } from '../types';
 import { supabase } from '../lib/supabase';
 
 interface SetupViewProps {
@@ -36,6 +36,85 @@ const SetupView: React.FC<SetupViewProps> = ({
   const [newRuleDesc, setNewRuleDesc] = useState('');
   const [newWord, setNewWord] = useState('');
   const [selectedRulesForWord, setSelectedRulesForWord] = useState<string[]>([]);
+
+  const [wordLists, setWordLists] = useState<WordList[]>([]);
+  const [isSavingList, setIsSavingList] = useState(false);
+  const [saveListName, setSaveListName] = useState('');
+
+  useEffect(() => {
+    fetchWordLists();
+  }, [userId]);
+
+  const fetchWordLists = async () => {
+    const { data, error } = await supabase
+      .from('word_lists')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (!error && data) {
+      setWordLists(data);
+    }
+  };
+
+  const saveCurrentAsList = async () => {
+    if (!saveListName.trim() || words.length === 0) return;
+    setLoading(true);
+    
+    const listId = crypto.randomUUID();
+    const newList = { id: listId, name: saveListName.trim(), user_id: userId };
+    
+    const { error: listError } = await supabase.from('word_lists').insert([newList]);
+    
+    if (!listError) {
+      const listItems = words.map(w => ({
+        id: crypto.randomUUID(),
+        word_list_id: listId,
+        text: w.text,
+        rule_ids: w.ruleIds
+      }));
+      
+      const { error: itemsError } = await supabase.from('word_list_items').insert(listItems);
+      
+      if (!itemsError) {
+        setWordLists([newList as any, ...wordLists]);
+        setSaveListName('');
+        setIsSavingList(false);
+      }
+    }
+    setLoading(false);
+  };
+
+  const loadWordList = async (listId: string) => {
+    if (!activeTestRound) return;
+    setLoading(true);
+    
+    const { data: items, error } = await supabase
+      .from('word_list_items')
+      .select('*')
+      .eq('word_list_id', listId);
+      
+    if (!error && items) {
+      const newWords = items.map(item => ({
+        id: crypto.randomUUID(),
+        text: item.text,
+        rule_ids: item.rule_ids,
+        user_id: userId,
+        test_round_id: activeTestRound.id
+      }));
+      
+      const { error: insertError } = await supabase.from('words').insert(newWords);
+      if (!insertError) {
+        setWords([...words, ...newWords.map(w => ({ ...w, ruleIds: w.rule_ids } as any))]);
+      }
+    }
+    setLoading(false);
+  };
+
+  const deleteWordList = async (id: string) => {
+    const { error } = await supabase.from('word_lists').delete().eq('id', id);
+    if (!error) {
+      setWordLists(wordLists.filter(l => l.id !== id));
+    }
+  };
 
   const addTestRound = async () => {
     if (!newRoundName.trim()) return;
@@ -260,12 +339,41 @@ const SetupView: React.FC<SetupViewProps> = ({
 
         {/* Woorden Sectie */}
         <section className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-          <div className="flex items-center gap-2 mb-6 text-amber-600">
-            <BookOpen size={24} />
-            <h3 className="text-xl font-bold">Woordenlijst ({activeTestRound?.name || '...'})</h3>
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-2 text-amber-600">
+              <BookOpen size={24} />
+              <h3 className="text-xl font-bold">Woordenlijst ({activeTestRound?.name || '...'})</h3>
+            </div>
+            <div className="flex gap-2">
+              <button 
+                onClick={() => setIsSavingList(!isSavingList)}
+                disabled={words.length === 0}
+                className="flex items-center gap-2 text-xs font-bold text-amber-600 bg-amber-50 px-3 py-1.5 rounded-lg hover:bg-amber-100 disabled:opacity-50"
+              >
+                <Save size={14} /> Opslaan als Bibliotheek
+              </button>
+            </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+
+          {isSavingList && (
+            <div className="mb-6 p-4 bg-amber-50 rounded-xl border border-amber-100 flex gap-2 items-center">
+              <input 
+                type="text" 
+                value={saveListName}
+                onChange={(e) => setSaveListName(e.target.value)}
+                placeholder="Naam voor deze lijst..."
+                className="flex-1 px-4 py-2 rounded-xl border border-amber-200 outline-none"
+              />
+              <button onClick={saveCurrentAsList} className="bg-amber-600 text-white px-4 py-2 rounded-xl font-bold text-sm">Opslaan</button>
+              <button onClick={() => setIsSavingList(false)} className="text-slate-400"><X size={20} /></button>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <div className="bg-slate-50 p-4 rounded-xl">
+              <h4 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
+                <Plus size={16} /> Nieuw Woord
+              </h4>
               <input type="text" value={newWord} onChange={(e) => setNewWord(e.target.value)} placeholder="Testwoord..." className="w-full px-4 py-2 rounded-xl border border-slate-200 mb-4 outline-none" />
               <div className="flex flex-wrap gap-1.5 mb-4">
                 {rules.map(r => (
@@ -276,7 +384,34 @@ const SetupView: React.FC<SetupViewProps> = ({
               </div>
               <button onClick={addWord} disabled={!newWord || selectedRulesForWord.length === 0} className="w-full bg-amber-600 text-white font-bold py-2 rounded-xl disabled:opacity-50">Voeg Woord Toe</button>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 overflow-y-auto max-h-48 pr-2">
+
+            <div className="bg-slate-50 p-4 rounded-xl">
+              <h4 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
+                <Download size={16} /> Uit Bibliotheek
+              </h4>
+              <div className="space-y-2 max-h-64 overflow-y-auto pr-2">
+                {wordLists.length === 0 ? (
+                  <p className="text-[10px] text-slate-400 italic">Nog geen opgeslagen lijsten.</p>
+                ) : (
+                  wordLists.map(list => (
+                    <div key={list.id} className="flex items-center justify-between p-2 bg-white rounded-lg border border-slate-200 group">
+                      <span className="text-xs font-medium text-slate-600 truncate flex-1">{list.name}</span>
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => loadWordList(list.id)} className="text-amber-600 hover:bg-amber-50 p-1 rounded transition-colors">
+                          <Plus size={14} />
+                        </button>
+                        <button onClick={() => deleteWordList(list.id)} className="text-slate-300 hover:text-rose-500 p-1 rounded opacity-0 group-hover:opacity-100 transition-all">
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-2 overflow-y-auto max-h-80 pr-2">
+              <h4 className="text-sm font-bold text-slate-700 mb-1">Huidige Lijst ({words.length})</h4>
               {words.map(w => (
                 <div key={w.id} className="p-2.5 bg-white border border-slate-100 rounded-xl group flex justify-between items-start">
                   <div>
