@@ -28,6 +28,20 @@ export interface TestRound {
   user_id: string;
 }
 
+export interface WordList {
+  id: string;
+  name: string;
+  user_id: string;
+  created_at: string;
+}
+
+export interface WordListItem {
+  id: string;
+  word_list_id: string;
+  text: string;
+  rule_ids: string[];
+}
+
 export interface AssessmentRecord {
   studentId: string;
   wordId: string;
